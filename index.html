@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>좀비 아포칼립스</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: monospace;
+      color: #fff;
+      text-align: center;
+    }
+    #gameCanvas {
+      background: #111;
+      display: block;
+      margin: 0 auto;
+      image-rendering: pixelated;
+    }
+    #startBtn, #avatarContainer, #gameOverScreen, #winScreen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #gameOverScreen button, #winScreen button {
+      margin-top: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #avatarContainer div {
+      display: inline-block;
+      margin: 0 20px;
+      cursor: pointer;
+    }
+    #avatarContainer div span {
+      display: block;
+      text-align: center;
+    }
+    #inventory {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    #inventory button {
+      margin: 0 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #timer {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>좀비 아포칼립스</h1>
+  <!-- 시작 화면 -->
+  <div id="startBtn"><button type="button">시작</button></div>
+  <!-- 아바타 선택 화면 -->
+  <div id="avatarContainer" style="display:none;">
+    <div data-color="red">
+      <div style="width:40px;height:40px;background:red;margin:0 auto;"></div>
+      <span>여자</span>
+    </div>
+    <div data-color="blue">
+      <div style="width:40px;height:40px;background:blue;margin:0 auto;"></div>
+      <span>남자</span>
+    </div>
+  </div>
+  <!-- 게임 캔버스 -->
+  <canvas id="gameCanvas" width="600" height="400" style="display:none;"></canvas>
+  <!-- 인벤토리 -->
+  <div id="inventory" style="display:none;"></div>
+  <!-- 타이머 -->
+  <div id="timer" style="display:none;">Time: 0</div>
+  <!-- 게임 오버 화면 -->
+  <div id="gameOverScreen" style="display:none;"><h2>게임 오버</h2><button id="restartBtn">재시작</button></div>
+  <!-- 게임 성공 화면 -->
+  <div id="winScreen" style="display:none;"><h2>게임 성공!</h2><button id="restartWinBtn">다시하기</button></div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const playerSize = 20;
+    let player = { x: canvas.width/2 - playerSize/2, y: canvas.height/2 - playerSize/2, color: 'red' };
+    let keys = {};
+    let zombies = [];
+    let spawnInterval, gameInterval, timerInterval;
+    let elapsedTime = 0;
+    let selectedItem = null;
+    const attackItems = ['총','야구방망이','프라이팬','칼'];
+    const defenseItems = ['방패'];
+
+    // 인벤토리 버튼 생성 (토글 기능 추가)
+    const inventory = document.getElementById('inventory');
+    [...attackItems, ...defenseItems].forEach(item => {
+      const btn = document.createElement('button');
+      btn.textContent = item;
+      btn.onclick = () => {
+        if (selectedItem === item) selectedItem = null;
+        else selectedItem = item;
+      };
+      inventory.appendChild(btn);
+    });
+
+    // 시작 버튼 클릭 이벤트
+    document.querySelector('#startBtn button').addEventListener('click', () => {
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('avatarContainer').style.display = 'block';
+    });
+
+    // 아바타 선택 이벤트
+    document.querySelectorAll('#avatarContainer div').forEach(div => {
+      div.addEventListener('click', () => {
+        player.color = div.getAttribute('data-color');
+        document.getElementById('avatarContainer').style.display = 'none';
+        startGame();
+      });
+    });
+
+    // 재시작 버튼 이벤트
+    document.getElementById('restartBtn').addEventListener('click', () => location.reload());
+    document.getElementById('restartWinBtn').addEventListener('click', () => location.reload());
+
+    function startGame() {
+      canvas.style.display = 'block';
+      inventory.style.display = 'block';
+      document.getElementById('timer').style.display = 'block';
+      spawnInterval = setInterval(spawnZombie, 1000);
+      gameInterval = setInterval(gameLoop, 1000/60);
+      timerInterval = setInterval(() => {
+        elapsedTime++;
+        document.getElementById('timer').textContent = 'Time: ' + elapsedTime;
+        if (elapsedTime >= 60) winGame();
+      }, 1000);
+    }
+
+    function spawnZombie() {
+      const size = 30; // 이모지 크기
+      const x = Math.random() * (canvas.width - size);
+      const y = Math.random() * (canvas.height - size);
+      const speed = 1 + Math.random() * 1.5;
+      const angle = Math.random() * Math.PI * 2;
+      const dx = Math.cos(angle) * speed;
+      const dy = Math.sin(angle) * speed;
+      zombies.push({ x, y, size, dx, dy });
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (keys['ArrowUp']) player.y -= 2;
+      if (keys['ArrowDown']) player.y += 2;
+      if (keys['ArrowLeft']) player.x -= 2;
+      if (keys['ArrowRight']) player.x += 2;
+      player.x = Math.max(0, Math.min(canvas.width - playerSize, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - playerSize, player.y));
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, playerSize, playerSize);
+      zombies.forEach((z, i) => {
+        z.x += z.dx;
+        z.y += z.dy;
+        if (z.x <= 0 || z.x + z.size >= canvas.width) z.dx *= -1;
+        if (z.y <= 0 || z.y + z.size >= canvas.height) z.dy *= -1;
+        ctx.font = `${z.size}px serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText('🧟', z.x, z.y);
+        if (collision(player, playerSize, playerSize, z, z.size, z.size)) {
+          if (attackItems.includes(selectedItem)) zombies.splice(i, 1);
+          else if (!defenseItems.includes(selectedItem)) gameOver();
+        }
+      });
+    }
+
+    function collision(a, aw, ah, b, bw, bh) {
+      return a.x < b.x + bw && a.x + aw > b.x && a.y < b.y + bh && a.y + ah > b.y;
+    }
+
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    function gameOver() {
+      clearGame();
+      canvas.style.display = 'none';
+      inventory.style.display = 'none';
+      document.getElementById('gameOverScreen').style.display = 'block';
+    }
+
+    function winGame() {
+      clearGame();
+      canvas.style.display = 'none';
+      inventory.style.display = 'none';
+      document.getElementById('winScreen').style.display = 'block';
+    }
+
+    function clearGame() {
+      clearInterval(spawnInterval);
+      clearInterval(gameInterval);
+      clearInterval(timerInterval);
+    }
+  </script>
+</body>
+</html>
